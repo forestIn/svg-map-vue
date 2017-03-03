@@ -2,27 +2,33 @@ Vue.use(VueMaterial)
 bus = new Vue
 
 Vue.component 'svg-map', 
-    template: '<g><region-path v-for="(region, index) in regions"
-                                :region="region">
+    template: '<g><region-path v-for="(value, key) in  regions"
+                                :index="key"
+                                :region="value">
                    </region-path>
               </g>',
     props: ['regions']
     components:
         'region-path':
             props:
-                region:Object 
-            template:'<path :index="region.name"
-                            :d="region.path" 
+                region:Object
+                index:Number                
+            template:'<path 
+                        :index="index"                         
+                        :d="region.path"               
                         v-on:click="getInfo" 
                         v-on:mouseover="mouseOver" 
                         v-on:mouseout="mouseOut" 
                         class="state" 
+                        v-if="region.show"
                         v-bind:class="{ regionActive: isActive}"/>'
             data: ()->
-                return { isActive: false }
+                return { 
+                    isActive: false,                    
+                }
             methods:
                 getInfo: ()->
-                    bus.$emit 'modal', @region.name
+                    bus.$emit 'modal', @index
                     return                     
                 mouseOver: ()->
                     bus.$emit 'regionName', @region.name
@@ -33,25 +39,21 @@ Vue.component 'svg-map',
                     @isActive=false
 
 
+
 new Vue
     el: '#app'
     data: 
-        regions:map_russia.pathes
         title:""
+        regions:""
         dataRegion:""
-        dataRegions:[]
         showModal:false
-        federal_city:['г. Севастополь', 'г. Москва']
+
     created: ()->
         vm = @
-        bus.$on 'modal', (name)->
-            vm.dataRegion = vm.dataRegions.filter (obj)->
-                                obj.region==name
-            if vm.dataRegion.length>0
-                vm.dataRegion = vm.dataRegion[0]
-                vm.$refs['dialog1'].open() 
-            else
-                console.log 'Нет данных по '+name
+
+        bus.$on 'modal', (id)->
+            vm.dataRegion = vm.regions[id]
+            vm.$refs['dialog1'].open() 
 
         bus.$on 'regionName', (name)->
             vm.title = name
@@ -59,19 +61,37 @@ new Vue
             vm.title = ''            
 
         axios.get('js/data.json')
-            .then (response)->
-                vm.dataRegions = response.data
-                for x in vm.dataRegions
-                    density = (x.city_population+x.country_population)/x.area
-                    x.density = Math.round(density * 10) / 10
-            .catch (error)->
-                console.log 'Ошибка! Не могу связаться с API. ' + error
+                .then (response)->                   
+                    regions = response.data
+                    for region of regions
+                        regions[region]['show']=true
+                        density = (regions[region].city_population+regions[region].country_population)/regions[region].area
+                        regions[region]['density']=Math.round(density * 10) / 10
+                    vm.regions = regions
+
+                    
+                .catch (error)->
+                    console.log 'Ошибка! Не могу связаться с API. ' + error
+                return
     methods: 
+        changeVisible: (name)->
+            regions = @regions.filter (value, index, self)->
+                value.fed_okrug==name
+            for region of regions
+                regions[region].show=!regions[region].show
+
         openDialog: (ref)->
             @$refs[ref].open()
 
         closeDialog: (ref)->
             @$refs[ref].close()
+    computed:
+        federal_okrug: ()->
+            okrugs_show = []
+            okrugs = (region.fed_okrug for region in @regions)
+            okrugs = okrugs.filter (value, index, self)->
+                self.indexOf(value)==index
+            for okrug in okrugs
+                okrugs_show.push({'name':okrug,'show':true})
+            okrugs_show
 
-        # glueFederalCity: ()->
-        #     if @dataRegions[]

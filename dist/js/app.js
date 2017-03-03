@@ -6,14 +6,15 @@
   bus = new Vue;
 
   Vue.component('svg-map', {
-    template: '<g><region-path v-for="(region, index) in regions" :region="region"> </region-path> </g>',
+    template: '<g><region-path v-for="(value, key) in  regions" :index="key" :region="value"> </region-path> </g>',
     props: ['regions'],
     components: {
       'region-path': {
         props: {
-          region: Object
+          region: Object,
+          index: Number
         },
-        template: '<path :index="region.name" :d="region.path" v-on:click="getInfo" v-on:mouseover="mouseOver" v-on:mouseout="mouseOut" class="state" v-bind:class="{ regionActive: isActive}"/>',
+        template: '<path :index="index" :d="region.path" v-on:click="getInfo" v-on:mouseover="mouseOver" v-on:mouseout="mouseOut" class="state" v-if="region.show" v-bind:class="{ regionActive: isActive}"/>',
         data: function() {
           return {
             isActive: false
@@ -21,7 +22,7 @@
         },
         methods: {
           getInfo: function() {
-            bus.$emit('modal', this.region.name);
+            bus.$emit('modal', this.index);
           },
           mouseOver: function() {
             bus.$emit('regionName', this.region.name);
@@ -39,26 +40,17 @@
   new Vue({
     el: '#app',
     data: {
-      regions: map_russia.pathes,
       title: "",
+      regions: "",
       dataRegion: "",
-      dataRegions: [],
-      showModal: false,
-      federal_city: ['г. Севастополь', 'г. Москва']
+      showModal: false
     },
     created: function() {
       var vm;
       vm = this;
-      bus.$on('modal', function(name) {
-        vm.dataRegion = vm.dataRegions.filter(function(obj) {
-          return obj.region === name;
-        });
-        if (vm.dataRegion.length > 0) {
-          vm.dataRegion = vm.dataRegion[0];
-          return vm.$refs['dialog1'].open();
-        } else {
-          return console.log('Нет данных по ' + name);
-        }
+      bus.$on('modal', function(id) {
+        vm.dataRegion = vm.regions[id];
+        return vm.$refs['dialog1'].open();
       });
       bus.$on('regionName', function(name) {
         return vm.title = name;
@@ -66,27 +58,63 @@
       bus.$on('regionNameOut', function() {
         return vm.title = '';
       });
-      return axios.get('js/data.json').then(function(response) {
-        var density, i, len, ref1, results, x;
-        vm.dataRegions = response.data;
-        ref1 = vm.dataRegions;
-        results = [];
-        for (i = 0, len = ref1.length; i < len; i++) {
-          x = ref1[i];
-          density = (x.city_population + x.country_population) / x.area;
-          results.push(x.density = Math.round(density * 10) / 10);
+      axios.get('js/data.json').then(function(response) {
+        var density, region, regions;
+        regions = response.data;
+        for (region in regions) {
+          regions[region]['show'] = true;
+          density = (regions[region].city_population + regions[region].country_population) / regions[region].area;
+          regions[region]['density'] = Math.round(density * 10) / 10;
         }
-        return results;
+        return vm.regions = regions;
       })["catch"](function(error) {
         return console.log('Ошибка! Не могу связаться с API. ' + error);
       });
     },
     methods: {
+      changeVisible: function(name) {
+        var region, regions, results;
+        regions = this.regions.filter(function(value, index, self) {
+          return value.fed_okrug === name;
+        });
+        results = [];
+        for (region in regions) {
+          results.push(regions[region].show = !regions[region].show);
+        }
+        return results;
+      },
       openDialog: function(ref) {
         return this.$refs[ref].open();
       },
       closeDialog: function(ref) {
         return this.$refs[ref].close();
+      }
+    },
+    computed: {
+      federal_okrug: function() {
+        var i, len, okrug, okrugs, okrugs_show, region;
+        okrugs_show = [];
+        okrugs = (function() {
+          var i, len, ref1, results;
+          ref1 = this.regions;
+          results = [];
+          for (i = 0, len = ref1.length; i < len; i++) {
+            region = ref1[i];
+            results.push(region.fed_okrug);
+          }
+          return results;
+        }).call(this);
+        okrugs = okrugs.filter(function(value, index, self) {
+          return self.indexOf(value) === index;
+        });
+        for (i = 0, len = okrugs.length; i < len; i++) {
+          okrug = okrugs[i];
+          okrugs_show.push({
+            'name': okrug,
+            'show': true
+          });
+        }
+        return okrugs_show;
       }
     }
   });
